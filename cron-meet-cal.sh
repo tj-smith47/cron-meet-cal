@@ -15,7 +15,7 @@
 # 2. Obtian an Oauth Client ID & Secret from Google Developer Console with read scopes for Google Calendar API
 # 3. Run `gcalcli --client-id=[oath-client-id] init` to initialize & follow the prompts to login
 # 4. Download this script to somewhere in your `PATH` and make it executable:
-#     $ curl -sSL https://raw.githubusercontent.com/tjsmith/master/cron-meet-cal.sh -o ~/.local/bin/cron-meet-cal
+#     $ curl -sSL https://raw.githubusercontent.com/tj-smith47/cron-meet-cal/refs/heads/master/cron-meet-cal.sh -o ~/.local/bin/cron-meet-cal
 #     $ chmod +x ~/.local/bin/cron-meet-cal
 # 5. Prepend your crontab with a daily entry that runs this script:
 #     $ echo -e "@daily\t[optional: any env overrides below] /path/to/cron-meet-cal\n$(crontab -l)" | crontab -
