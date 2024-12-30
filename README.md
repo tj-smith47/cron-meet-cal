@@ -6,19 +6,19 @@
   (Cron)tab Scheduling · Zoom (Meet)ings · Google (Cal)endar
 </h3>
 
-Schedule ephemeral Crontab entries that auto-open Zoom meetings found in your Google Calendar.
+Crontab, meet calendar; schedule cron jobs that auto-join Zoom meetings found in your Google Calendar.
 
 ## What does CronMeetCal do?
 
-This script reads your current day's meetings from Google Calendar, and adds entries to your crontab
-that automatically open Zoom meetings at the scheduled time. Each day it also cleans any meetings
-added the previous day, and will skip adding entries if any holiday or out of office events are
+Each day, this script checks your scheduled meetings in Google Calendar, then appends entries to your
+crontab that will automatically join those with Zoom meetings at the scheduled time. It will also clean
+the previous day's meetings daily, and skips adding entries if any holiday or out of office events are
 detected on your calendar.
 
 ### Dependencies
 
-- [`gcalcli`](https://github.com/insanum/gcalcli) - A command line interface for Google Calendar (requires an Oauth Client ID & Secret)
-- [`nowplaying-cli`](https://github.com/kirtan-shah/nowplaying-cli) - Optional: A command line interface for controlling music playback
+- [`gcalcli`](https://github.com/insanum/gcalcli) - A command line interface for the Google Calendar API (requires an Oauth Client ID & Secret)
+- [`nowplaying-cli`](https://github.com/kirtan-shah/nowplaying-cli) - Optional: A command line interface for controlling music playback from any source
 
 ### Additional Features
 
