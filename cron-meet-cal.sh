@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# shellcheck disable=SC2010,SC2063,SC2094,SC2155
+# shellcheck disable=SC2010,SC2046,SC2063,SC2094,SC2155
 #
 # CronMeetCal - Autogenerate ephemeral Crontab entries that open Zoom meetings from Google Calendar.
 #
@@ -46,9 +46,10 @@ TODAY=$(date "+%Y-%m-%d")
 DOW=$(date +'%A' | tr '[:upper:]' '[:lower:]')
 CT_CONTENT=$(crontab -l)
 AGENDA=$(
-  gcalcli agenda --details location --details conference --military --tsv 2>/dev/null |
+  gcalcli agenda --details location --details conference --military --tsv $(grep -q 'false' <<<"${CMC_TESTING}" && echo '--nostarted') 2>/dev/null |
     grep -v Home | grep "${TODAY}"
 )
+[[ "${CMC_TESTING}" == "true" ]] && echo -e "AGENDA:\n${AGENDA}\n"
 
 ## Functions
 add_new_meeting_entries() {
@@ -73,13 +74,18 @@ add_new_meeting_entries() {
   # Add new entries from gcalcli agenda
   while read -r line; do
     # Skip lines without a meeting link
-    if ! grep 'zoom' <<<"${line}"; then
-      [[ "${CMC_ENABLE_DEBUG}" == "true" && -n "${line}" ]] && log_event "Skipping line: ${line}"
+    if ! grep -q 'zoom' <<<"${line}"; then
+      [[ "${CMC_ENABLE_DEBUG}" == "true" && -n "${line}" ]] &&
+        log_event "Skipping line: ${line}"
       continue
     fi
 
-    # Generate cron time elements (optionally set offset for opening app)
+    # Parse meeting info
+    meeting_link=$(echo -e "${line}" | sed 's/\t/\n/g' | grep -m 1 'zoom')
+    meeting_title=$(echo -e "${line}" | sed 's/\t/\n/g' | grep -v -E "^..:..$|^video$|https|${TODAY}" | grep -m 1 .)
     meeting_time=$(echo "${line}" | awk '{print $2}')
+
+    # Parse cron time elements (check optional offset for opening app)
     if [[ "${CMC_OFFSET_MIN:-1}" != "0" ]]; then
       date_obj=$(date -j -f '%H:%M' "${meeting_time}" +'%s')
       offset_min=$((CMC_OFFSET_MIN * 60))
@@ -87,10 +93,6 @@ add_new_meeting_entries() {
     fi
     hour=$(echo "${meeting_time}" | cut -d':' -f1)
     minute=$(echo "${meeting_time}" | cut -d':' -f2)
-
-    # Parse meeting info
-    meeting_link=$(echo -e "${line}" | sed 's/\t/\n/g' | grep -m 1 'zoom')
-    meeting_title=$(echo -e "${line}" | sed 's/\t/\n/g' | grep -v -E "^..:..$|^video$|https|${TODAY}" | grep -m 1 .)
 
     # Generate cron entry
     comment="# Open meeting: ${meeting_title} | ${TODAY} @${hour}:${minute}"
@@ -103,17 +105,49 @@ add_new_meeting_entries() {
   echo -e "${CT_CONTENT}" | crontab -
 }
 
-cleanup() {
-  # Trim log file
-  cat <<<"$(tail -n "${CMC_LOG_LIMIT}" "${CMC_LOG_FILE}")" >"${CMC_LOG_FILE}"
+begin_setup() {
+  # Create log file subdirectory if it doesn't exist
+  if [[ ! -f "${CMC_LOG_FILE}" ]]; then
+    log_dir=$(dirname "${CMC_LOG_FILE}")
+    [[ ! -d "${log_dir}" ]] && mkdir -p "${log_dir}"
+    [[ "${CMC_ENABLE_DEBUG}" == "true" ]] &&
+      log_event "Creating log file at ${CMC_LOG_FILE}"
+  fi
 
-  # Backup 'after' crontab if requested
+  # Backup 'before' crontab if requested
   if [[ "${CMC_ENABLE_BACKUP}" == "true" ]]; then
-    crontab -l >"${CMC_BACKUP_DIR}/${DOW}/crontab.new"
+    # Determine backup directory from frequency
+    backup_dir=$(get_backup_dir)
+
+    # Create backup directory if it doesn't exist
+    [[ ! -d "${backup_dir}" ]] && {
+      [[ "${CMC_ENABLE_DEBUG}" == "true" ]] &&
+        log_event "Creating backup dir for ${DOW}"
+      mkdir -p "${backup_dir}"
+    }
+
+    # Backup current crontab
+    crontab -l >"${backup_dir}/crontab.bak"
+  fi
+
+  # Remove previous entries if they exist
+  if grep -q 'Managed by CronMeetCal' <<<"${CT_CONTENT}"; then
+    [[ "${CMC_ENABLE_DEBUG}" == "true" ]] &&
+      log_event "Removing previous entries"
+    remove_previous_entries
   fi
 }
 
-ensure_deps() {
+check_cron_frequency() {
+  # Determine cron frequency
+  if grep 'cron-meet-cal' <<<"${CT_CONTENT}" | grep -q 'hourly'; then
+    echo "hourly"
+  else
+    echo "daily"
+  fi
+}
+
+ensure_dependencies() {
   # Check for gcalcli
   if ! command -v gcalcli &>/dev/null; then
     log_event "ERROR: gcalcli is not installed. Run \`brew install gcalcli\`, initialize, and try again" >&2
@@ -125,8 +159,14 @@ ensure_deps() {
   fi
 }
 
+get_backup_dir() {
+  backup_dir="${CMC_BACKUP_DIR}/${DOW}/"
+  [[ "$(check_cron_frequency)" == "hourly" ]] && backup_dir+="$(date +'%H')/"
+  echo "${backup_dir}"
+}
+
 log_event() {
-  echo "${TODAY} - ${1}" >>"${CMC_LOG_FILE}"
+  echo "[${TODAY} $(date +'%H:%M:%S')] - ${1}" >>"${CMC_LOG_FILE}"
   [[ "${CMC_TESTING}" == "true" ]] && echo "${1}"
   grep -q 'ERROR' <<<"${1}" && exit 1
 }
@@ -146,49 +186,37 @@ remove_previous_entries() {
   rm "${tmp_file}"
 }
 
-setup_environment() {
-  # Create log file subdirectory if it doesn't exist
-  if [[ ! -f "${CMC_LOG_FILE}" ]]; then
-    log_dir=$(dirname "${CMC_LOG_FILE}")
-    [[ ! -d "${log_dir}" ]] && mkdir -p "${log_dir}"
-    log_event "Creating log file at ${CMC_LOG_FILE}"
-  fi
+update_crontab() {
+  # Determine necessary behavior from agenda contents
+  COUNT_OF_MEETINGS=$(echo -e "${AGENDA}" | grep 'zoom' | grep -c -)
+  HOLIDAY=$(grep -q 'Holiday' <<<"${AGENDA}" && echo "true" || echo "false")
+  OUT_OF_OFFICE=$(grep -q -i 'ooo\|out of office' <<<"${AGENDA}" && echo "true" || echo "false")
 
-  # Backup 'before' crontab if requested
+  if [[ -z "${AGENDA}" ]] || [[ "${COUNT_OF_MEETINGS}" == "0" ]]; then
+    log_event "No meetings detected, nothing to add"
+  elif [[ "${OUT_OF_OFFICE}" == "true" ]]; then
+    log_event "OOO detected, skipping update"
+  elif [[ "${HOLIDAY}" == "true" ]]; then
+    log_event "Holiday detected, skipping update"
+  else
+    context=$(grep -q '1' <<<"${COUNT_OF_MEETINGS}" && echo "meeting" || echo "meetings")
+    log_event "${COUNT_OF_MEETINGS} Zoom ${context} detected, updating crontab"
+    add_new_meeting_entries
+  fi
+}
+
+wrap_up() {
+  # Trim log file
+  cat <<<"$(tail -n "${CMC_LOG_LIMIT}" "${CMC_LOG_FILE}")" >"${CMC_LOG_FILE}"
+
+  # Backup 'after' crontab if requested
   if [[ "${CMC_ENABLE_BACKUP}" == "true" ]]; then
-    dow_backup_dir="${CMC_BACKUP_DIR}/${DOW}/"
-    [[ ! -d "${dow_backup_dir}" ]] && {
-      log_event "Creating backup dir for ${DOW}"
-      mkdir -p "${dow_backup_dir}"
-    }
-    crontab -l >"${dow_backup_dir}/crontab.bak"
-  fi
-
-  # Remove previous entries if they exist
-  if grep -q 'Managed by CronMeetCal' <<<"${CT_CONTENT}"; then
-    log_event "Removing previous entries"
-    remove_previous_entries
+    crontab -l >"$(get_backup_dir)/crontab.new"
   fi
 }
 
 ## MAIN ##
-setup_environment
-ensure_deps
-
-# Determine necessary behavior from agenda contents
-HOLIDAY=$(grep -q 'Holiday' <<<"${AGENDA}" && echo "true" || echo "false")
-NUM_MEETINGS=$(echo -e "${AGENDA}" | grep 'zoom' | grep -c -)
-OUT_OF_OFFICE=$(grep -q -i 'ooo\|out of office' <<<"${AGENDA}" && echo "true" || echo "false")
-
-if [[ -z "${AGENDA}" ]] || [[ "${NUM_MEETINGS}" == "0" ]]; then
-  log_event "No meetings detected, removed previous entries"
-elif [[ "${OUT_OF_OFFICE}" == "true" ]]; then
-  log_event "OOO detected, removed previous entries"
-elif [[ "${HOLIDAY}" == "true" ]]; then
-  log_event "Holiday detected, removed previous entries"
-else
-  log_event "${NUM_MEETINGS} Zoom meetings detected, updating crontab"
-  add_new_meeting_entries
-fi
-
-cleanup
+begin_setup
+ensure_dependencies
+update_crontab
+wrap_up

@@ -10,10 +10,14 @@ Crontab, meet calendar; automate scheduling cron jobs to join Zoom meetings foun
 
 ## What does CronMeetCal do?
 
-Each day, this script checks your scheduled meetings in Google Calendar, then appends entries to your
+CronMeetCal ensures you will never be late to your meetings again.
+
+Each run, this script checks your scheduled meetings in Google Calendar, then appends entries to your
 crontab that will automatically join those with Zoom meetings at the scheduled time. It will also clean
-the previous day's meetings daily, and skips adding entries if any holiday or out of office events are
+meetings added in previous runs, and skips adding entries if any holiday or out of office events are
 detected on your calendar.
+
+It can be run directly, but works best as an `@daily` or `@hourly` crontab entry.
 
 ### Dependencies
 
@@ -24,7 +28,7 @@ detected on your calendar.
 
 - Maintains a daily event log file of a user-configurable length (default 100 lines).
 - Integrates with `nowplaying-cli` to ensure active music is paused prior to opening your meeting.
-- Can optionally be configured to back up one week of pre & post script crontab files.
+- Can optionally be configured to back up one week of pre & post run crontab files (daily or hourly).
 
 ## Setup
 
@@ -48,14 +52,18 @@ gcalcli --client-id=[oath-client-id] init
 4. Download this script to somewhere in your `$PATH` and make it executable:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/tjsmith/cron-meet-cal/master/cron-meet-cal.sh -o ~/.local/bin/cron-meet-cal
+curl -sL -o ~/.local/bin/cron-meet-cal \
+  https://raw.githubusercontent.com/tjsmith/cron-meet-cal/master/cron-meet-cal.sh
 chmod +x ~/.local/bin/cron-meet-cal
 ```
 
-5. Prepend your crontab with a daily entry that runs this script:
+5. Prepend your crontab with a daily entry that runs this script (or hourly to pick up impromptu meetings):
 
 ```bash
 echo -e "@daily\t[optional: desired envs] /path/to/cron-meet-cal\n$(crontab -l)" | crontab -
+
+# Or, hourly using all default values
+echo -e "@hourly\t/path/to/cron-meet-cal\n$(crontab -l)" | crontab -
 ```
 
 ### Permissions
@@ -63,7 +71,7 @@ echo -e "@daily\t[optional: desired envs] /path/to/cron-meet-cal\n$(crontab -l)"
 You may get a confirmation popup when running step 5 about elevated permissions. If so, you'll
 need to allow your terminal editor full disk access in Settings in order to let this script update
 your crontab unattended. To do so, go to `Settings > Privacy & Security > Full Disk Access` and
-enable access for your terminal emulator.
+enable access for your terminal emulator app.
 > This is due to a new MacOS Sonoma setting, but is generally safe - many common apps for Mac (like Alfred) require this setting as well. Even enabled, user specific permissions will still limit file access per user.
 
 ## ENV's
