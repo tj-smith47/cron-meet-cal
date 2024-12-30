@@ -6,7 +6,7 @@
   (Cron)tab Scheduling · Zoom (Meet)ings · Google (Cal)endar
 </h3>
 
-Crontab, meet calendar; schedule cron jobs that auto-join Zoom meetings found in your Google Calendar.
+Crontab, meet calendar; automate scheduling cron jobs to join Zoom meetings found in your Google Calendar.
 
 ## What does CronMeetCal do?
 
