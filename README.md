@@ -42,7 +42,7 @@ brew install nowplaying-cli
 3. Run the following to initialize `gcalcli`, then follow the prompts to login:
 
 ```bash
-gcalcli --client-id=[oath-client-id] initi
+gcalcli --client-id=[oath-client-id] init
 ```
 
 4. Download this script to somewhere in your `$PATH` and make it executable:
