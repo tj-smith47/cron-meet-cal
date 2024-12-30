@@ -178,15 +178,15 @@ HOLIDAY=$(grep -q 'Holiday' <<<"${AGENDA}" && echo "true" || echo "false")
 NUM_MEETINGS=$(echo -e "${AGENDA}" | grep 'zoom' | grep -c -)
 OUT_OF_OFFICE=$(grep -q -i 'ooo\|out of office' <<<"${AGENDA}" && echo "true" || echo "false")
 
-# if [[ -z "${AGENDA}" ]] || [[ "${NUM_MEETINGS}" == "0" ]]; then
-#   log_event "No meetings detected, removed previous entries"
-# elif [[ "${OUT_OF_OFFICE}" == "true" ]]; then
-#   log_event "OOO detected, removed previous entries"
-# elif [[ "${HOLIDAY}" == "true" ]]; then
-#   log_event "Holiday detected, removed previous entries"
-# else
-log_event "${NUM_MEETINGS} Zoom meetings detected, updating crontab"
-add_new_meeting_entries
-# fi
+if [[ -z "${AGENDA}" ]] || [[ "${NUM_MEETINGS}" == "0" ]]; then
+  log_event "No meetings detected, removed previous entries"
+elif [[ "${OUT_OF_OFFICE}" == "true" ]]; then
+  log_event "OOO detected, removed previous entries"
+elif [[ "${HOLIDAY}" == "true" ]]; then
+  log_event "Holiday detected, removed previous entries"
+else
+  log_event "${NUM_MEETINGS} Zoom meetings detected, updating crontab"
+  add_new_meeting_entries
+fi
 
 cleanup
