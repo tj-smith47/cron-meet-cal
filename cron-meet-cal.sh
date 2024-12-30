@@ -39,13 +39,14 @@ CMC_ENABLE_DEBUG=${CMC_ENABLE_DEBUG:-true}
 CMC_LOG_FILE=${CMC_LOG_FILE:-${CMC_BACKUP_DIR}/events.log}
 CMC_LOG_LIMIT=${CMC_LOG_LIMIT:-100}
 CMC_OFFSET_MIN=${CMC_OFFSET_MIN:-1}
+CMC_TESTING="${CMC_TESTING:-false}"
 
 # Meeting & crontab vars
 TODAY=$(date "+%Y-%m-%d")
 DOW=$(date +'%A' | tr '[:upper:]' '[:lower:]')
 CT_CONTENT=$(crontab -l)
 AGENDA=$(
-  gcalclz agenda --details location --details conference --military --tsv 2>/dev/null |
+  gcalcli agenda --details location --details conference --military --tsv 2>/dev/null |
     grep -v Home | grep "${TODAY}"
 )
 
@@ -89,7 +90,7 @@ add_new_meeting_entries() {
 
     # Parse meeting info
     meeting_link=$(echo -e "${line}" | sed 's/\t/\n/g' | grep -m 1 'zoom')
-    meeting_title=$(echo -e "${line}" | sed 's/\t/\n/g' | grep -v -E "^..:..$|^video$|https|${TODAY}" -m 1)
+    meeting_title=$(echo -e "${line}" | sed 's/\t/\n/g' | grep -v -E "^..:..$|^video$|https|${TODAY}" | grep -m 1 .)
 
     # Generate cron entry
     comment="# Open meeting: ${meeting_title} | ${TODAY} @${hour}:${minute}"
@@ -126,6 +127,7 @@ ensure_deps() {
 
 log_event() {
   echo "${TODAY} - ${1}" >>"${CMC_LOG_FILE}"
+  [[ "${CMC_TESTING}" == "true" ]] && echo "${1}"
   grep -q 'ERROR' <<<"${1}" && exit 1
 }
 
