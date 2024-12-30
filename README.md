@@ -62,8 +62,8 @@ echo -e "@daily\t[optional: desired envs] /path/to/cron-meet-cal\n$(crontab -l)"
 
 You may get a confirmation popup when running step 5 about elevated permissions. If so, you'll
 need to allow your terminal editor full disk access in Settings in order to let this script update
-your crontab unattended. To do so, go to `Settings > Privacy & Security > Full Disk Access`, then
-allow your terminal application access.
+your crontab unattended. To do so, go to `Settings > Privacy & Security > Full Disk Access` and
+enable access for your terminal emulator.
 > This is due to a new MacOS Sonoma setting, but is generally safe - many common apps for Mac (like Alfred) require this setting as well. Even enabled, user specific permissions will still limit file access per user.
 
 ## ENV's
