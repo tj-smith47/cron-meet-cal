@@ -42,6 +42,7 @@ CMC_OFFSET_MIN=${CMC_OFFSET_MIN:-1}
 CMC_TESTING="${CMC_TESTING:-false}"
 
 # Meeting & crontab vars
+PATH="/opt/homebrew/bin:/usr/local/bin:${PATH}" # Ensure brew is in path
 TODAY=$(date "+%Y-%m-%d")
 DOW=$(date +'%A' | tr '[:upper:]' '[:lower:]')
 CT_CONTENT=$(crontab -l)
@@ -148,14 +149,16 @@ check_cron_frequency() {
 }
 
 ensure_dependencies() {
-  # Check for gcalcli
-  if ! command -v gcalcli &>/dev/null; then
-    log_event "ERROR: gcalcli is not installed. Run \`brew install gcalcli\`, initialize, and try again" >&2
-  fi
+  if [[ -z "${AGENDA}" ]]; then
+    # Check for homebrew
+    if ! command -v brew &>/dev/null; then
+      log_event "ERROR: Homebrew is not installed. Install it and try again" >&2
+    fi
 
-  # Check for homebrew
-  if ! command -v brew &>/dev/null; then
-    log_event "ERROR: Homebrew is not installed. Install it and try again" >&2
+    # Check for gcalcli
+    if ! command -v gcalcli &>/dev/null; then
+      log_event "ERROR: gcalcli is not installed. Run \`brew install gcalcli\`, initialize, and try again" >&2
+    fi
   fi
 }
 
