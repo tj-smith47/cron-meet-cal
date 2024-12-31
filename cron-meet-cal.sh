@@ -43,12 +43,13 @@ CMC_TESTING="${CMC_TESTING:-false}"
 
 # Meeting & crontab vars
 PATH="/opt/homebrew/bin:/usr/local/bin:${PATH}" # Ensure brew is in path
-TODAY=$(date "+%Y-%m-%d")
+HOUR=$(date +'%H')
+DATE=$(date "+%Y-%m-%d")
 DOW=$(date +'%A' | tr '[:upper:]' '[:lower:]')
 CT_CONTENT=$(crontab -l)
 AGENDA=$(
   gcalcli agenda --details location --details conference --military --tsv $(grep -q 'false' <<<"${CMC_TESTING}" && echo '--nostarted') 2>/dev/null |
-    grep -v Home | grep "${TODAY}"
+    grep -v Home | grep "${DATE}"
 )
 [[ "${CMC_TESTING}" == "true" ]] && echo -e "AGENDA:\n${AGENDA}\n"
 
@@ -83,7 +84,7 @@ add_new_meeting_entries() {
 
     # Parse meeting info
     meeting_link=$(echo -e "${line}" | sed 's/\t/\n/g' | grep -m 1 'zoom')
-    meeting_title=$(echo -e "${line}" | sed 's/\t/\n/g' | grep -v -E "^..:..$|^video$|https|${TODAY}" | grep -m 1 .)
+    meeting_title=$(echo -e "${line}" | sed 's/\t/\n/g' | grep -v -E "^..:..$|^video$|https|${DATE}" | grep -m 1 .)
     meeting_time=$(echo "${line}" | awk '{print $2}')
 
     # Parse cron time elements (check optional offset for opening app)
@@ -96,7 +97,7 @@ add_new_meeting_entries() {
     minute=$(echo "${meeting_time}" | cut -d':' -f2)
 
     # Generate cron entry
-    comment="# Open meeting: ${meeting_title} | ${TODAY} @${hour}:${minute}"
+    comment="# Open meeting: ${meeting_title} | ${DATE} @${hour}:${minute}"
     entry="${minute} ${hour} * * $(date +%u) ${cmd_prefix} ${meeting_link}"
 
     # Append new entry to crontab content
@@ -123,7 +124,7 @@ begin_setup() {
     # Create backup directory if it doesn't exist
     [[ ! -d "${backup_dir}" ]] && {
       [[ "${CMC_ENABLE_DEBUG}" == "true" ]] &&
-        log_event "Creating backup dir for ${DOW}"
+        log_event "Creating backup dir for ${DOW}$(grep -q "${HOUR}" <<<"${backup_dir}" && echo -e "/${HOUR}")"
       mkdir -p "${backup_dir}"
     }
 
@@ -164,12 +165,12 @@ ensure_dependencies() {
 
 get_backup_dir() {
   backup_dir="${CMC_BACKUP_DIR}/${DOW}/"
-  [[ "$(check_cron_frequency)" == "hourly" ]] && backup_dir+="$(date +'%H')/"
+  [[ "$(check_cron_frequency)" == "hourly" ]] && backup_dir+="${HOUR}/"
   echo "${backup_dir}"
 }
 
 log_event() {
-  echo "[${TODAY} $(date +'%H:%M:%S')] - ${1}" >>"${CMC_LOG_FILE}"
+  echo "[${DATE} $(date +'%H:%M:%S')] - ${1}" >>"${CMC_LOG_FILE}"
   [[ "${CMC_TESTING}" == "true" ]] && echo "${1}"
   grep -q 'ERROR' <<<"${1}" && exit 1
 }
