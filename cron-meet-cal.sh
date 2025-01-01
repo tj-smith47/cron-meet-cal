@@ -187,6 +187,7 @@ remove_previous_entries() {
   done <<<"${CT_CONTENT}"
 
   CT_CONTENT=$(cat "${tmp_file}")
+  crontab "${tmp_file}"
   rm "${tmp_file}"
 }
 
