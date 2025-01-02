@@ -79,9 +79,9 @@ enable access for your terminal emulator app.
 CronMeetCal can be configured if desired with the following envs:
 | Env | Description | Default |
 | --- | ----------- | ------- |
-| CMC_BACKUP_DIR | Directory to store crontab backups | `/tmp/cmc` |
-| CMC_ENABLE_BACKUP | Enable crontab backups | `true` |
-| CMC_ENABLE_DEBUG | Enable debug logging | `true` |
-| CMC_LOG_FILE | File to log events | `${CMC_BACKUP_DIR}/events.log` |
-| CMC_LOG_LIMIT | Max lines to keep in log file | `100` |
-| CMC_OFFSET_MIN | # min prior to meeting start to open Zoom | `1` |
+| `CMC_BACKUP_DIR` | Directory to store crontab backups | `/tmp/cmc` |
+| `CMC_ENABLE_BACKUP` | Enable crontab backups | `true` |
+| `CMC_ENABLE_DEBUG` | Enable debug logging | `true` |
+| `CMC_LOG_FILE` | File to log events | `${CMC_BACKUP_DIR}/events.log` |
+| `CMC_LOG_LIMIT` | Max lines to keep in log file | `100` |
+| `CMC_OFFSET_MIN` | # min prior to meeting start to open Zoom | `1` |
