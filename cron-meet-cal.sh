@@ -101,7 +101,7 @@ add_new_meeting_entries() {
     entry="${minute} ${hour} * * $(date +%u) ${cmd_prefix} ${meeting_link}"
 
     # Append new entry to crontab content
-    CT_CONTENT="${CT_CONTENT}\n${comment}\n${entry}"
+    CT_CONTENT="${CT_CONTENT}\n${comment}\n${entry}\n"
   done <<<"${AGENDA}"
 
   echo -e "${CT_CONTENT}" | crontab -
