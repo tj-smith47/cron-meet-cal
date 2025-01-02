@@ -214,9 +214,14 @@ wrap_up() {
   # Trim log file
   cat <<<"$(tail -n "${CMC_LOG_LIMIT}" "${CMC_LOG_FILE}")" >"${CMC_LOG_FILE}"
 
-  # Backup 'after' crontab if requested
+  # Backup 'after' crontab if requested...
   if [[ "${CMC_ENABLE_BACKUP}" == "true" ]]; then
-    crontab -l >"$(get_backup_dir)/crontab.new"
+    backup_dir=$(get_backup_dir)
+    crontab -l >"${backup_dir}/crontab.new"
+    # ...but remove backup subdir for this hour's run if not changed
+    if cmp -s "${backup_dir}/crontab.bak" "${backup_dir}/crontab.new"; then
+      rm -rf "${backup_dir}"
+    fi
   fi
 }
 
