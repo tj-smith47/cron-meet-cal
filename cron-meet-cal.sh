@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# shellcheck disable=SC2010,SC2046,SC2063,SC2094,SC2155
+# shellcheck disable=SC2001,SC2010,SC2046,SC2063,SC2094,SC2155
 #
 # CronMeetCal - Autogenerate ephemeral Crontab entries that open Zoom meetings from Google Calendar.
 #
@@ -38,18 +38,19 @@ CMC_ENABLE_BACKUP=${CMC_ENABLE_BACKUP:-true}
 CMC_ENABLE_DEBUG=${CMC_ENABLE_DEBUG:-true}
 CMC_LOG_FILE=${CMC_LOG_FILE:-${CMC_BACKUP_DIR}/events.log}
 CMC_LOG_LIMIT=${CMC_LOG_LIMIT:-100}
-CMC_OFFSET_MIN=${CMC_OFFSET_MIN:-1}
+CMC_OFFSET_MIN=${CMC_OFFSET_MIN:-0}
 CMC_TESTING="${CMC_TESTING:-false}"
 
 # Meeting & crontab vars
 PATH="/opt/homebrew/bin:/usr/local/bin:${PATH}" # Ensure brew is in path
 HOUR=$(date +'%H')
 DATE=$(date "+%Y-%m-%d")
+DAY_NUM=$(echo "${DATE}" | cut -d '-' -f 3)
 DOW=$(date +'%A' | tr '[:upper:]' '[:lower:]')
 CT_CONTENT=$(crontab -l)
 AGENDA=$(
   gcalcli agenda --details location --details conference --military --tsv $(grep -q 'false' <<<"${CMC_TESTING}" && echo '--nostarted') 2>/dev/null |
-    grep -v Home | grep "${DATE}"
+    grep -v Home | grep -v 'Office Hours with' | grep "${DATE}"
 )
 [[ "${CMC_TESTING}" == "true" ]] && echo -e "AGENDA:\n${AGENDA}\n"
 
@@ -168,6 +169,36 @@ get_backup_dir() {
   [[ "$(check_cron_frequency)" == "hourly" ]] && backup_dir+="${HOUR}/"
   echo "${backup_dir}"
 }
+get_country() {
+  local country_code=$(locale | grep -m 1 'UTF' | cut -d '_' -f 2 | cut -d '.' -f 1)
+  case "${country_code}" in
+  "US")
+    echo "United States|US"
+    ;;
+  "GB")
+    echo "London|UK"
+    ;;
+  "PL")
+    echo "Poland|Warsaw"
+    ;;
+  "MX")
+    echo "Mexico|MX"
+    ;;
+  *)
+    country_name=$(curl -sL http://whatismycountry.com/ | grep -m 1 'Your country is' | sed 's/.*country">Your country is \(.*\) ..<.*/\1/g')
+    [[ -n "${country_name}" ]] && echo "${country_name}|${country_code}" || echo "${country_code}"
+    ;;
+  esac
+}
+
+get_holiday_cal() {
+  local holiday_cals=$(gcalcli list | grep 'Holiday' | sed 's/.*  \(.*\)/\1/g')
+  if [[ $(grep -c 'Holidays' <<<"${holiday_cals}") -gt 1 ]]; then
+    echo "${holiday_cals}" | grep -m 1 -E "$(get_country)"
+  else
+    echo "${holiday_cals}"
+  fi
+}
 
 log_event() {
   echo "[${DATE} $(date +'%H:%M:%S')] - ${1}" >>"${CMC_LOG_FILE}"
@@ -194,8 +225,8 @@ remove_previous_entries() {
 update_crontab() {
   # Determine necessary behavior from agenda contents
   COUNT_OF_MEETINGS=$(echo -e "${AGENDA}" | grep 'zoom' | grep -c -)
-  HOLIDAY=$(grep -q 'Holiday' <<<"${AGENDA}" && echo "true" || echo "false")
   OUT_OF_OFFICE=$(grep -q -i 'ooo\|out of office' <<<"${AGENDA}" && echo "true" || echo "false")
+  HOLIDAY=$(gcalcli agenda --calendar "$(get_holiday_cal)" | grep -q "${DAY_NUM}" && echo "true" || echo "false")
 
   if [[ -z "${AGENDA}" ]] || [[ "${COUNT_OF_MEETINGS}" == "0" ]]; then
     log_event "No meetings detected, nothing to add"
