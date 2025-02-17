@@ -38,19 +38,19 @@ CMC_ENABLE_BACKUP=${CMC_ENABLE_BACKUP:-true}
 CMC_ENABLE_DEBUG=${CMC_ENABLE_DEBUG:-true}
 CMC_LOG_FILE=${CMC_LOG_FILE:-${CMC_BACKUP_DIR}/events.log}
 CMC_LOG_LIMIT=${CMC_LOG_LIMIT:-100}
-CMC_OFFSET_MIN=${CMC_OFFSET_MIN:-0}
+CMC_OFFSET_MIN=${CMC_OFFSET_MIN:-1}
 CMC_TESTING="${CMC_TESTING:-false}"
 
 # Meeting & crontab vars
 PATH="/opt/homebrew/bin:/usr/local/bin:${PATH}" # Ensure brew is in path
-HOUR=$(date +'%H')
-DATE=$(date "+%Y-%m-%d")
-DAY_NUM=$(echo "${DATE}" | cut -d '-' -f 3)
+MINUTE=$(date +'%M')
+HOUR=$(date +'%-H')
+DATE=$(date +"%Y-%m-%d")
 DOW=$(date +'%A' | tr '[:upper:]' '[:lower:]')
 CT_CONTENT=$(crontab -l)
 AGENDA=$(
-  gcalcli agenda --details location --details conference --military --tsv $(grep -q 'false' <<<"${CMC_TESTING}" && echo '--nostarted') 2>/dev/null |
-    grep -v Home | grep -v 'Office Hours with' | grep "${DATE}"
+  gcalcli agenda --details time --details location --details conference --military --tsv "${DATE}" 2>/dev/null |
+    grep -vE 'start_date|Home|Office Hours with'
 )
 [[ "${CMC_TESTING}" == "true" ]] && echo -e "AGENDA:\n${AGENDA}\n"
 
@@ -97,13 +97,16 @@ add_new_meeting_entries() {
     hour=$(echo "${meeting_time}" | cut -d':' -f1)
     minute=$(echo "${meeting_time}" | cut -d':' -f2)
 
+    # Skip if meeting is in the past
+    meeting_is_future "${hour}" "${minute}" || continue
+
     # Generate cron entry
     comment="# Open meeting: ${meeting_title} | ${DATE} @${hour}:${minute}"
     entry="${minute} ${hour} * * $(date +%u) ${cmd_prefix} ${meeting_link}"
 
     # Append new entry to crontab content
     CT_CONTENT="${CT_CONTENT}\n${comment}\n${entry}\n"
-  done <<<"${AGENDA}"
+  done < <(grep "${DATE}" <<<"${AGENDA}")
 
   echo -e "${CT_CONTENT}" | crontab -
 }
@@ -143,10 +146,10 @@ begin_setup() {
 
 check_cron_frequency() {
   # Determine cron frequency
-  if grep 'cron-meet-cal' <<<"${CT_CONTENT}" | grep -q 'hourly'; then
-    echo "hourly"
-  else
+  if grep 'cron-meet-cal' <<<"${CT_CONTENT}" | grep -q 'daily'; then
     echo "daily"
+  else
+    echo "hourly"
   fi
 }
 
@@ -169,6 +172,7 @@ get_backup_dir() {
   [[ "$(check_cron_frequency)" == "hourly" ]] && backup_dir+="${HOUR}/"
   echo "${backup_dir}"
 }
+
 get_country() {
   local country_code=$(locale | grep -m 1 'UTF' | cut -d '_' -f 2 | cut -d '.' -f 1)
   case "${country_code}" in
@@ -200,10 +204,41 @@ get_holiday_cal() {
   fi
 }
 
+get_is_holiday() {
+  local holiday_agenda=$(
+    gcalcli agenda --calendar "$(get_holiday_cal)" --details time --military --tsv "${DATE}" 2>/dev/null
+  )
+  local is_holiday=false
+
+  if [[ -n "${holiday_agenda}" ]]; then
+    holiday_name=$(sed 's/\t/\n/g' <<<"${holiday_agenda}" | grep . | tail -n 1)
+    # Real holidays will be in the user's normal calendar, and include start / end times
+    grep "${holiday_name}" <<<"${AGENDA}" | sed 's/\t/\n/g' | grep -q '^..:..$' && {
+      log_event "Holiday detected: ${holiday_name}"
+      is_holiday=true
+    }
+  fi
+
+  echo "${is_holiday}"
+}
+
 log_event() {
   echo "[${DATE} $(date +'%H:%M:%S')] - ${1}" >>"${CMC_LOG_FILE}"
   [[ "${CMC_TESTING}" == "true" ]] && echo "${1}"
   grep -q 'ERROR' <<<"${1}" && exit 1
+}
+
+meeting_is_future() {
+  local current_hour=$(sed 's/^0//' <<<"${HOUR}")
+  local meeting_hour=$(sed 's/^0//' <<<"${1}")
+  local current_minute=$(sed 's/^0//' <<<"${MINUTE}")
+  local meeting_minute=$(sed 's/^0//' <<<"${2}")
+
+  if [[ "${current_hour}" -gt "${meeting_hour}" ]]; then
+    return 1
+  elif [[ "${current_hour}" -eq "${meeting_hour}" && "${current_minute}" -gt "${meeting_minute}" ]]; then
+    return 1
+  fi
 }
 
 remove_previous_entries() {
@@ -226,14 +261,20 @@ update_crontab() {
   # Determine necessary behavior from agenda contents
   COUNT_OF_MEETINGS=$(echo -e "${AGENDA}" | grep 'zoom' | grep -c -)
   OUT_OF_OFFICE=$(grep -q -i 'ooo\|out of office' <<<"${AGENDA}" && echo "true" || echo "false")
-  HOLIDAY=$(gcalcli agenda --calendar "$(get_holiday_cal)" | grep -q "${DAY_NUM}" && echo "true" || echo "false")
+  HOLIDAY=$(get_is_holiday)
 
-  if [[ -z "${AGENDA}" ]] || [[ "${COUNT_OF_MEETINGS}" == "0" ]]; then
-    log_event "No meetings detected, nothing to add"
-  elif [[ "${OUT_OF_OFFICE}" == "true" ]]; then
+  if [[ "${CMC_TESTING}" == "true" ]]; then
+    echo -e "Agenda:\n${AGENDA}\n"
+    echo "Out of Office: ${OUT_OF_OFFICE}"
+    echo "Holiday: ${HOLIDAY}"
+  fi
+
+  if [[ "${OUT_OF_OFFICE}" == "true" ]]; then
     log_event "OOO detected, skipping update"
   elif [[ "${HOLIDAY}" == "true" ]]; then
     log_event "Holiday detected, skipping update"
+  elif [[ -z "${AGENDA}" ]] || [[ "${COUNT_OF_MEETINGS}" == "0" ]]; then
+    log_event "No meetings detected, nothing to add"
   else
     context=$(grep -q '1' <<<"${COUNT_OF_MEETINGS}" && echo "meeting" || echo "meetings")
     log_event "${COUNT_OF_MEETINGS} Zoom ${context} detected, updating crontab"
