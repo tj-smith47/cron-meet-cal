@@ -46,10 +46,11 @@ PATH="/opt/homebrew/bin:/usr/local/bin:${PATH}" # Ensure brew is in path
 MINUTE=$(date +'%M')
 HOUR=$(date +'%-H')
 DATE=$(date +"%Y-%m-%d")
+TMRW=$(date -v+1d +"%Y-%m-%d")
 DOW=$(date +'%A' | tr '[:upper:]' '[:lower:]')
 CT_CONTENT=$(crontab -l)
 AGENDA=$(
-  gcalcli agenda --details time --details location --details conference --military --tsv "${DATE}" 2>/dev/null |
+  gcalcli agenda --details time --details location --details conference --military --tsv "${DATE}" "${TMRW}" 2>/dev/null |
     grep -vE 'start_date|Home|Office Hours with'
 )
 [[ "${CMC_TESTING}" == "true" ]] && echo -e "AGENDA:\n${AGENDA}\n"
