@@ -50,7 +50,7 @@ TMRW=$(date -v+1d +"%Y-%m-%d")
 DOW=$(date +'%A' | tr '[:upper:]' '[:lower:]')
 CT_CONTENT=$(crontab -l)
 AGENDA=$(
-  gcalcli agenda --details time --details location --details conference --military --tsv "${DATE}" "${TMRW}" 2>/dev/null |
+  gcalcli agenda --details time --details location --details conference --military --tsv "$(date +"%Y-%m-%d")" "$(date -v+1d +"%Y-%m-%d")" 2>/dev/null |
     grep -vE 'start_date|Home|Office Hours with'
 )
 [[ "${CMC_TESTING}" == "true" ]] && echo -e "AGENDA:\n${AGENDA}\n"
@@ -64,7 +64,7 @@ add_new_meeting_entries() {
   [[ ! -f "${zoom_path}" ]] && log_event "ERROR: Zoom app not found at ${zoom_path}"
 
   # Set command prefix
-  cmd_prefix="/usr/bin/open -a ${zoom_path}"
+  cmd_prefix="/usr/bin/open"
   if [[ -f "$(brew --prefix)/bin/nowplaying-cli" ]]; then
     # Optionally pause music before opening the meeting
     cmd_prefix="$(brew --prefix)/bin/nowplaying-cli pause 2>/dev/null; ${cmd_prefix}"
@@ -78,14 +78,14 @@ add_new_meeting_entries() {
   # Add new entries from gcalcli agenda
   while read -r line; do
     # Skip lines without a meeting link
-    if ! grep -q 'zoom' <<<"${line}"; then
+    if ! grep -qE 'zoom|meet' <<<"${line}"; then
       [[ "${CMC_ENABLE_DEBUG}" == "true" && -n "${line}" ]] &&
         log_event "Skipping line: ${line}"
       continue
     fi
 
     # Parse meeting info
-    meeting_link=$(echo -e "${line}" | sed 's/\t/\n/g' | grep -m 1 'zoom')
+    meeting_link=$(echo -e "${line}" | sed 's/\t/\n/g' | grep -m 1 -E 'zoom|meet')
     meeting_title=$(echo -e "${line}" | sed 's/\t/\n/g' | grep -v -E "^..:..$|^video$|https|${DATE}" | grep -m 1 .)
     meeting_time=$(echo "${line}" | awk '{print $2}')
 
@@ -103,7 +103,11 @@ add_new_meeting_entries() {
 
     # Generate cron entry
     comment="# Open meeting: ${meeting_title} | ${DATE} @${hour}:${minute}"
-    entry="${minute} ${hour} * * $(date +%u) ${cmd_prefix} ${meeting_link}"
+    if grep -q 'zoom' <<<"${meeting_link}"; then
+      entry="${minute} ${hour} * * $(date +%u) ${cmd_prefix} -a ${zoom_path} ${meeting_link}"
+    else
+      entry="${minute} ${hour} * * $(date +%u) ${cmd_prefix} ${meeting_link}"
+    fi
 
     # Append new entry to crontab content
     CT_CONTENT="${CT_CONTENT}\n${comment}\n${entry}\n"
@@ -197,7 +201,7 @@ get_country() {
 }
 
 get_holiday_cal() {
-  local holiday_cals=$(gcalcli list | grep 'Holiday' | sed 's/.*  \(.*\)/\1/g')
+  local holiday_cals=$(gcalcli list 2>/dev/null | grep 'Holiday' | sed 's/.*  \(.*\)/\1/g')
   if [[ $(grep -c 'Holidays' <<<"${holiday_cals}") -gt 1 ]]; then
     echo "${holiday_cals}" | grep -m 1 -E "$(get_country)"
   else
@@ -261,6 +265,7 @@ remove_previous_entries() {
 update_crontab() {
   # Determine necessary behavior from agenda contents
   COUNT_OF_MEETINGS=$(echo -e "${AGENDA}" | grep 'zoom' | grep -c -)
+  # TODO: Create custom out of office func to only prevent joining meetings after the OOO start time
   OUT_OF_OFFICE=$(grep -q -i 'ooo\|out of office' <<<"${AGENDA}" && echo "true" || echo "false")
   HOLIDAY=$(get_is_holiday)
 
