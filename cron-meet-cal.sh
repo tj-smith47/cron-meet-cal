@@ -50,7 +50,7 @@ TMRW=$(date -v+1d +"%Y-%m-%d")
 DOW=$(date +'%A' | tr '[:upper:]' '[:lower:]')
 CT_CONTENT=$(crontab -l)
 AGENDA=$(
-  gcalcli agenda --details time --details location --details conference --military --tsv "$(date +"%Y-%m-%d")" "$(date -v+1d +"%Y-%m-%d")" 2>/dev/null |
+  gcalcli agenda --details time --details location --details conference --military --tsv "${DATE}" "${TMRW}" 2>/dev/null |
     grep -vE 'start_date|Home|Office Hours with'
 )
 [[ "${CMC_TESTING}" == "true" ]] && echo -e "AGENDA:\n${AGENDA}\n"
@@ -192,6 +192,9 @@ get_country() {
     ;;
   "MX")
     echo "Mexico|MX"
+    ;;
+  "IN")
+    echo "India|IN"
     ;;
   *)
     country_name=$(curl -sL http://whatismycountry.com/ | grep -m 1 'Your country is' | sed 's/.*country">Your country is \(.*\) ..<.*/\1/g')
